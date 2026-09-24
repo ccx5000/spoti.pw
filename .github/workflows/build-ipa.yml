@@ -42,9 +42,17 @@ jobs:
       - name: Download IPA
         run: |
           mkdir -p ipa
-          curl -fL --retry 3 --retry-all-errors --retry-delay 2 --compressed \
-            -A "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36" \
-            "${{ inputs.ipa_url }}" -o ipa/spotify.ipa
+          IPA_URL="${{ inputs.ipa_url }}"
+          IPA_OUT="ipa/spotify.ipa"
+          UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+          CURL_COMMON=(--retry 3 --retry-all-errors --retry-delay 2 --compressed -A "$UA")
+
+          if ! curl -fL "${CURL_COMMON[@]}" "$IPA_URL" -o "$IPA_OUT"; then
+            ORIGIN="$(printf '%s' "$IPA_URL" | sed -E 's#(https?://[^/]+).*#\1#')"
+            echo "::warning::Direct download failed, retrying with Referer $ORIGIN/"
+            curl -fL "${CURL_COMMON[@]}" -e "$ORIGIN/" -H "Accept: application/octet-stream,*/*;q=0.9" "$IPA_URL" -o "$IPA_OUT"
+          fi
+
           case "$(file --mime-type -b ipa/spotify.ipa)" in application/zip|application/x-ios-app) ;; *) echo "::error::Not an IPA"; exit 1 ;; esac
 
       - run: make release
